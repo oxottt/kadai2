@@ -1,0 +1,11 @@
+﻿{
+    "hash": 1234,
+    "name": "Ivan",
+    "family": "Ivanov",
+    "data": {
+        "key": 123,
+        "url": "www.example.com",
+        "img name": "foto.png"
+    },
+    "update": 1581120000
+}
