@@ -3,41 +3,29 @@ class WebhookController
 {
     public function indexAction()
     {
-        echo "<h1>Webhook Endpoint</h1>";
-        echo "<p>Send POST requests with JSON to this endpoint</p>";
+        // ????????????? ????????? Content-Type
+        header('Content-Type: text/plain');
         
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            echo "<h2>POST Request Received</h2>";
-            
             // ???????? raw JSON ??????
             $jsonData = file_get_contents('php://input');
-            
-            // ??????? BOM ???? ????
             $jsonData = $this->removeBOM($jsonData);
             
-            // ???????? raw ?????? ??? ???????
-            echo "<p><strong>Raw input (first 100 chars):</strong> " . htmlspecialchars(substr($jsonData, 0, 100)) . "</p>";
-            
-            // ???????? ???????????? JSON
             $data = json_decode($jsonData, true);
             
-            // ????????? ?????? JSON
             if (json_last_error() !== JSON_ERROR_NONE) {
-                echo "<p style='color: red;'>? JSON Error: " . json_last_error_msg() . "</p>";
-                echo "<p>Error code: " . json_last_error() . "</p>";
-                echo "<p>Received data length: " . strlen($jsonData) . " chars</p>";
-                echo "<pre>Received data: " . htmlspecialchars($jsonData) . "</pre>";
+                // ?????????? ?????? ?? ?? ???????? 200
+                http_response_code(200);
+                echo 'ERROR: Invalid JSON - ' . json_last_error_msg();
                 return;
             }
             
             if ($data) {
-                echo "<pre>Received JSON: " . json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "</pre>";
-                
-                // ????????? ? MongoDB
                 try {
                     $client = new MongoDB\Client('mongodb://localhost:27017');
-                    $collection = $client->webhook_db->webhooks;
                     
+                    // ????????? ? webhooks ?????????
+                    $webhooksCollection = $client->webhook_db->webhooks;
                     $document = [
                         'hash' => $data['hash'] ?? null,
                         'name' => $data['name'] ?? null,
@@ -49,11 +37,9 @@ class WebhookController
                         'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown'
                     ];
                     
-                    $result = $collection->insertOne($document);
+                    $result = $webhooksCollection->insertOne($document);
                     
-                    echo "<p style='color: green;'>? Data saved to MongoDB! Document ID: " . $result->getInsertedId() . "</p>";
-                    
-                    // ????? ?????????/????????? ???????????? ? ????????? users
+                    // ?????????? ? USERS ?????????
                     if (isset($data['hash']) && isset($data['name'])) {
                         $usersCollection = $client->webhook_db->users;
                         
@@ -63,26 +49,38 @@ class WebhookController
                             'family' => $data['family'] ?? '',
                             'data' => $data['data'] ?? [],
                             'update' => $data['update'] ?? time(),
+                            'created_at' => new MongoDB\BSON\UTCDateTime(),
                             'last_updated' => new MongoDB\BSON\UTCDateTime()
                         ];
                         
-                        // ???? ???????????? ?? hash ? ????????? ??? ??????? ??????
                         $usersCollection->updateOne(
                             ['hash' => (int)$data['hash']],
                             ['$set' => $userData],
                             ['upsert' => true]
                         );
-                        
-                        echo "<p style='color: green;'>? User data updated in users collection!</p>";
                     }
                     
+                    // ?????????? ???????? ?????
+                    http_response_code(200);
+                    echo 'OK';
+                    
                 } catch (Exception $e) {
-                    echo "<p style='color: red;'>? Error saving to MongoDB: " . $e->getMessage() . "</p>";
+                    // ?????????? ?????? ?? ?? ???????? 200
+                    http_response_code(200);
+                    echo 'ERROR: MongoDB - ' . $e->getMessage();
                 }
                 
             } else {
-                echo "<p style='color: red;'>? Empty or invalid JSON received</p>";
+                // ?????????? ?????? ?? ?? ???????? 200
+                http_response_code(200);
+                echo 'ERROR: Empty JSON received';
             }
+        } else {
+            // ??? GET ???????? ?????????? ??????????
+            header('Content-Type: text/html');
+            echo "<h1>Webhook Endpoint</h1>";
+            echo "<p>Send POST requests with JSON to this endpoint</p>";
+            echo "<p>Response: HTTP 200 with 'OK' text</p>";
         }
     }
     
